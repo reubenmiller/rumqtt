@@ -3,6 +3,8 @@ on:
   push:
     tags:
       - 'rumqttd-*'
+    branches:
+      - ci-build-more-targets
 
 jobs:
   build-release:
@@ -11,17 +13,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [linux-musl, linux-gnu]
+        build:
+          - linux-musl
+          - linux-gnu
+          - armv7-unknown-linux-musleabihf
         include:
           - build: linux-musl
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+          
+          - build: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+
           - build: linux-gnu
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -41,10 +51,20 @@ jobs:
 
       - name: rename
         # this assumes git tag is in format rumqttd-x.x.x
-        run: mv ${{ env.TARGET_DIR }}/release/rumqttd ${{ github.ref_name }}-${{ matrix.build }}
+        run: |
+          mv ${{ env.TARGET_DIR }}/release/rumqttd rumqttd-${{ matrix.build }}
+          upx --lzma --best rumqttd-${{ matrix.build }}
+
+      - name: Upload artifacts
+        # https://github.com/marketplace/actions/upload-a-build-artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: rumqttd-${{ matrix.target }}
+            path: target/${{ matrix.target }}/rumqttd-${{ matrix.build }}
 
       - name: Upload release archive
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           files: rumqttd*
